@@ -4,8 +4,12 @@ public class DummyTask extends DummySuperTask {
     /**
      * Im A Comment
      */
+    @Input
     public String foo;
     
+    /**
+     * private field
+     */
     private double fubar;
     
     /**
@@ -16,4 +20,15 @@ public class DummyTask extends DummySuperTask {
     public String bar() {
         return "bar";
     }
+    
+    
+    /**
+     * Dazugehörige Methode
+     */
+    @Input
+    @Optional
+    public double getFubar() {
+        return fubar;
+    }
+    
 }

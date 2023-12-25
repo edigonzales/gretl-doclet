@@ -6,4 +6,6 @@ public abstract class DummySuperTask extends SuperSuperDummyTask {
      */
     public String abstractFoo;
 
+    
+    
 }

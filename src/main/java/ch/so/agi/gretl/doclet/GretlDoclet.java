@@ -6,7 +6,9 @@ import java.util.Locale;
 import java.util.Set;
 import javax.lang.model.SourceVersion;
 import javax.lang.model.element.Element;
+import javax.lang.model.util.ElementFilter;
 import javax.lang.model.util.ElementScanner9;
+import javax.lang.model.util.Elements;
 import javax.tools.Diagnostic;
  
 import com.sun.source.doctree.DocCommentTree;
@@ -67,6 +69,9 @@ public class GretlDoclet implements Doclet {
     private String outputFile;
     private int gamma;
     
+    private DocTrees dcTreeUtils;
+    private Elements elementsUtils;
+
     @Override
     public void init(Locale locale, Reporter reporter) {
         this.reporter = reporter;
@@ -113,6 +118,14 @@ public class GretlDoclet implements Doclet {
                     String packURL = JAVADOC_URL + pack.getQualifiedName().toString()
                             .replace(".", "/") + "/";
 
+                    // Alle Klassen suchen. Die abstrakten Klassen werden ignoriert und ihre
+                    // Attribute (Parameter) müssen bei der Kindklasse eruiert werden.
+                    // ACHTUNG: In der neuen Syntax sind alle Task-Klassen abstract.
+                    // Vielleicht nach einer Methode Ausschau halten, mit der TaskAction-
+                    // Annotation? (preprocessing)
+                    // Oder auch nicht. Müssen wir dann entscheiden. Abstrakt glaub nur, falls
+                    // es managed types sind. Das ist nicht zwingend für lazy. Aber hat den 
+                    // Vorteil, dass man den Getter nicht schreiben muss. (?)
                     Iterator<? extends Element> classesIterator = pack.getEnclosedElements()
                             .stream()
                             .filter(element -> env.isSelected(element) && env.isIncluded(element))
@@ -121,12 +134,26 @@ public class GretlDoclet implements Doclet {
                             .sorted(Comparator.comparing((Element o) -> o.getSimpleName()
                                     .toString()))
                             .iterator();
+                    
+                    DocTrees docTrees = env.getDocTrees();
+                    System.out.println("classes:" + ElementFilter.typesIn(env.getIncludedElements()));
+
+                    dcTreeUtils = env.getDocTrees();
+                    System.out.println(dcTreeUtils);
+                    
+                    elementsUtils = env.getElementUtils();
 
                     while (classesIterator.hasNext()) {
                         Element cls = classesIterator.next();
+                        System.out.println("className: " + cls.getSimpleName());
                         
                         TypeElement classElement = (TypeElement) cls;
                         System.out.println("super: " + classElement.getSuperclass());
+                        
+                        List<String> fields = new ArrayList<>();
+                        getFields(classElement, fields); 
+                        
+                        System.out.println("fields: " + fields);
                         
 //                        System.out.println(classElement.getModifiers().size());
 //                        classElement.getModifiers().stream().filter(m -> {
@@ -150,6 +177,27 @@ public class GretlDoclet implements Doclet {
         }
 
         return true;
+    }
+    
+    private void getFields(TypeElement classElement, List<String> fields) {
+        for (Element element : classElement.getEnclosedElements()) {
+            System.out.println("element: " + element);
+            System.out.println("kind: " + element.getKind());
+            
+            DocCommentTree dcTree = dcTreeUtils.getDocCommentTree(element);
+            //System.out.println("dcTree: " + dcTree);
+            
+            if (element.getKind().isField() || element.getKind().equals(ElementKind.METHOD)) {
+                System.out.println("element is field or method");
+                
+                try {
+                    System.out.println(elementsUtils.getAllAnnotationMirrors(element));
+                    
+                } catch (Exception e) {}
+                
+            }
+            
+        }
     }
     
     private void emitClassDocs(DocletEnvironment env, PrintWriter pw, String packURL, Element cls) {
