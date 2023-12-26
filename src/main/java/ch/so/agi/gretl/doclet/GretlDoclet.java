@@ -4,9 +4,12 @@ import java.io.PrintStream;
 import java.util.List;
 import java.util.Locale;
 import java.util.Set;
+import java.util.Stack;
+
 import javax.lang.model.SourceVersion;
 import javax.lang.model.element.AnnotationMirror;
 import javax.lang.model.element.Element;
+import javax.lang.model.element.VariableElement;
 import javax.lang.model.util.ElementFilter;
 import javax.lang.model.util.ElementScanner9;
 import javax.lang.model.util.Elements;
@@ -35,6 +38,7 @@ import javax.lang.model.element.TypeElement;
 import javax.lang.model.type.ArrayType;
 import javax.lang.model.type.TypeKind;
 import javax.lang.model.type.TypeMirror;
+import javax.lang.model.type.DeclaredType;
 import javax.tools.Diagnostic;
 import java.io.File;
 import java.io.FileWriter;
@@ -202,12 +206,38 @@ public class GretlDoclet implements Doclet {
         System.out.println("***"+cls.getSimpleName()+"***");
         for (Element element : cls.getEnclosedElements()) {
             if (element.getKind().isField()) {
-                System.out.println("field: " + element.getSimpleName());
-                System.out.println("field: " + element.asType());
+                
+                //System.out.println(elementsUtils.getAllAnnotationMirrors(element));
+                boolean isGradleProperty = elementsUtils.getAllAnnotationMirrors(element).stream().map(annot -> {
+                    String annotSimpleName = annot.toString().substring(annot.toString().lastIndexOf(".")+1);
+                    return annotSimpleName;
+                })
+                .anyMatch(GRADLE_ANNOTATIONS::contains);
+                
+                if (!isGradleProperty) 
+                    continue;
+
+                System.out.println("---------------------");
+
+                String name = element.getSimpleName().toString();
+                System.out.println("name: " + name);
+                if (dcTreeUtils.getDocCommentTree(element) != null) {
+                    String description = dcTreeUtils.getDocCommentTree(element).toString();                    
+                }
+                String qualifiedFieldType = element.asType().toString();
+                
+                String unqualifiedFieldType = getUnqualifiedFieldType(qualifiedFieldType);
+                System.out.println("unqualifiedFieldType: " + unqualifiedFieldType);
+                
+//                if (element.asType().getKind().equals(TypeKind.DECLARED)) {
+//                    
+//                    DeclaredType dType = (DeclaredType) element.asType();
+//                    System.out.println(dType);
+//                    System.out.println(dType.asElement());
+//                }
+                
                 fields.add(element.getSimpleName() + " ---- " + element.asType());
                 
-                
-                // TODO prüfen auf Annotation
             }
         }
         
@@ -221,6 +251,130 @@ public class GretlDoclet implements Doclet {
         } else {
             return;
         }
+    }
+    
+   
+    private String getUnqualifiedFieldType(String fieldType) {        
+        if (!fieldType.contains(".")) {
+            return fieldType;
+        }
+        
+        if (!fieldType.contains("<")) {
+            return fieldType.substring(fieldType.lastIndexOf(".") + 1);
+        }
+        
+        StringBuilder unqualifiedFieldType = new StringBuilder();
+        
+        String[] partsBracket = fieldType.split("[<]");
+        // Print the result
+        System.out.println("Split parts:");
+        for (int i=0; i<partsBracket.length; i++) {
+            System.out.println("part:" + partsBracket[i]);
+            if (i>0) {
+                unqualifiedFieldType.append("<");
+            }
+            String[] partsComma = partsBracket[i].split(",");
+            for(int ii=0; ii<partsComma.length; ii++) {
+                unqualifiedFieldType.append(getUnqualifiedFieldType(partsComma[ii]));
+                if (ii<partsComma.length-1) {
+                    unqualifiedFieldType.append(",");
+                }
+            }
+            
+//            unqualifiedFieldType.append(getUnqualifiedFieldType(partsBracket[i]));
+//            if (i>0) {
+//                unqualifiedFieldType.append(">");            
+//            }
+        }
+
+        
+        
+//        if (!fieldType.contains(".")) {
+//            return fieldType;
+//        }
+//        
+//        if (!fieldType.contains("<")) {
+//            return fieldType.substring(fieldType.lastIndexOf(".")+1);
+//        }
+//        
+//        if (!fieldType.startsWith("<") && fieldType.contains("<")) {
+//            unqualifiedFieldType.append(getUnqualifiedFieldType(fieldType.substring(0, fieldType.indexOf("<"))));
+//        }
+//      
+//        System.out.println("unqualifiedFieldType (inside 1): " + unqualifiedFieldType);
+        
+        
+        
+        
+//        Stack<Integer> stack = new Stack<>();
+//        Stack<Integer> nested = new Stack<>();
+//        boolean openingBracketFound = false;
+//        for (int i = 0; i < fieldType.length(); i++) {
+//            char currentChar = fieldType.charAt(i);
+//            if (currentChar == '<' && !openingBracketFound) {
+//                stack.push(i);
+//                openingBracketFound = true;
+//            } else if (currentChar == '>' && !stack.isEmpty()) {
+//                int startIndex = stack.pop();
+//                int endIndex = i;
+//                String textBetweenBrackets = fieldType.substring(startIndex + 1, endIndex);
+//                
+//                unqualifiedFieldType.append("<");
+//
+//                String[] splittedFieldTypes = textBetweenBrackets.split(",");
+//                for (String ft : splittedFieldTypes) {
+//                    unqualifiedFieldType.append(getUnqualifiedFieldType(ft));                    
+//                }
+//                
+//                unqualifiedFieldType.append(">");
+//                
+//                if (openingBracketFound) {
+//                    unqualifiedFieldType.append(">");                    
+//                }
+//
+//                //unqualifiedFieldType.append("<").append(getUnqualifiedFieldType(textBetweenBrackets)).append(">");
+//                
+//                System.out.println("1111Text between angle brackets: " + textBetweenBrackets);
+//            } else if (currentChar == '<' && openingBracketFound) {
+//                System.out.println("nested");
+//                nested.push(i);
+//                int startIndex = stack.pop();
+//                int endIndex = i;
+//                String textBetweenBrackets = fieldType.substring(startIndex + 1, endIndex);
+//                System.out.println("textBetweenBrackets: " + textBetweenBrackets);
+//                
+//                unqualifiedFieldType.append("<").append(getUnqualifiedFieldType(textBetweenBrackets));
+//                //System.out.println("2222Text between angle brackets: " + textBetweenBrackets);                
+//                stack.push(i);
+//            }
+//        }
+
+//        boolean insideBrackets = false;
+//        StringBuilder contentInsideBrackets = new StringBuilder();
+//
+//        for (char c : fieldType.toCharArray()) {
+//            if (c == '<' && !insideBrackets) {
+//                insideBrackets = true;
+//                System.out.println("erstes");
+//            } else if (c == '<' && insideBrackets) {
+//                System.out.println("nested");
+//                System.out.println("Content inside angle brackets: " + contentInsideBrackets.toString());
+//                contentInsideBrackets.setLength(0); // Clear the StringBuilder for the next match
+//            } else if (c == '>' && insideBrackets) {
+//                //insideBrackets = false;
+//                System.out.println("Content inside angle brackets: " + contentInsideBrackets.toString());
+//                contentInsideBrackets.setLength(0); // Clear the StringBuilder for the next match
+//            } else if (insideBrackets) {
+//                contentInsideBrackets.append(c);
+//            }
+//        }
+//
+//        /* 
+//         * Wenn erstes "<", dann generic found. Zeichen sammeln, bis ">" oder nächstes "<". Zeichen ausgeben. 
+//         */
+//        
+        
+        return unqualifiedFieldType.toString();
     }
     
     private boolean findTaskAction(Element classElement) {

@@ -1,6 +1,7 @@
 package ch.so.agi.gretl.doclet.test;
 
 import java.util.List;
+import java.util.Map;
 
 public class DummyTask extends DummySuperTask {
     /**
@@ -16,7 +17,10 @@ public class DummyTask extends DummySuperTask {
     
     @Input
     public List<String> empty;
-    
+
+    @Input
+    public List<Map<String,Double>> bloedeMapList;
+
     /**
      * Im a Description
      * 
