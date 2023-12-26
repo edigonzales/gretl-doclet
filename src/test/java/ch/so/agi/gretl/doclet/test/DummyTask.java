@@ -1,5 +1,7 @@
 package ch.so.agi.gretl.doclet.test;
 
+import java.util.List;
+
 public class DummyTask extends DummySuperTask {
     /**
      * Im A Comment
@@ -11,6 +13,9 @@ public class DummyTask extends DummySuperTask {
      * private field
      */
     private double fubar;
+    
+    @Input
+    public List<String> empty;
     
     /**
      * Im a Description
@@ -26,9 +31,13 @@ public class DummyTask extends DummySuperTask {
      * Dazugehörige Methode
      */
     @Input
-    @Optional
+    @ch.so.agi.gretl.doclet.test.Optional
     public double getFubar() {
         return fubar;
     }
     
+    @TaskAction
+    public void run() {
+        
+    }
 }

@@ -5,6 +5,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Set;
 import javax.lang.model.SourceVersion;
+import javax.lang.model.element.AnnotationMirror;
 import javax.lang.model.element.Element;
 import javax.lang.model.util.ElementFilter;
 import javax.lang.model.util.ElementScanner9;
@@ -71,6 +72,16 @@ public class GretlDoclet implements Doclet {
     
     private DocTrees dcTreeUtils;
     private Elements elementsUtils;
+    
+    private static final List<String> GRADLE_ANNOTATIONS = new ArrayList<>() {{
+        add("Input");
+        add("InputFile");
+        add("Optional");
+        add("OutputFile");
+        add("OutputDirectory");
+    }};
+    
+    private static final String TASK_ACTION_ANNOTATION = "TaskAction";
 
     @Override
     public void init(Locale locale, Reporter reporter) {
@@ -135,23 +146,31 @@ public class GretlDoclet implements Doclet {
                                     .toString()))
                             .iterator();
                     
-                    DocTrees docTrees = env.getDocTrees();
-                    System.out.println("classes:" + ElementFilter.typesIn(env.getIncludedElements()));
-
-                    dcTreeUtils = env.getDocTrees();
-                    System.out.println(dcTreeUtils);
                     
+                    //DocTrees docTrees = env.getDocTrees();
+                    //System.out.println("classes:" + ElementFilter.typesIn(env.getIncludedElements()));
+
+                    // Beschreibungen (gemäss Spez) sämtlicher Element.
+                    dcTreeUtils = env.getDocTrees();
+                    
+                    // Annotationen (und andere Infos) sämtlicher Elemente.
                     elementsUtils = env.getElementUtils();
 
                     while (classesIterator.hasNext()) {
-                        Element cls = classesIterator.next();
+                        Element cls = classesIterator.next();                                                
+                        //TypeElement classElement = (TypeElement) cls;
                         System.out.println("className: " + cls.getSimpleName());
+                        System.out.println("className: " + cls);
+
+                        // Nur Klassen mit einer TaskAction-annotierten Methoden werden behandelt.
+                        if (!findTaskAction(cls)) 
+                            continue;
+
                         
                         TypeElement classElement = (TypeElement) cls;
-                        System.out.println("super: " + classElement.getSuperclass());
                         
                         List<String> fields = new ArrayList<>();
-                        getFields(classElement, fields); 
+                        getFieldsDummy(classElement, fields); 
                         
                         System.out.println("fields: " + fields);
                         
@@ -163,7 +182,7 @@ public class GretlDoclet implements Doclet {
 //                        });
                         
                         // Each class links to Oracle's main JavaDoc
-                        emitClassDocs(env, pw, packURL, cls);
+//                        emitClassDocs(env, pw, packURL, cls);
                         if (classesIterator.hasNext()) {
                             pw.print("\n");
                         }
@@ -179,6 +198,42 @@ public class GretlDoclet implements Doclet {
         return true;
     }
     
+    private void getFieldsDummy(Element cls, List<String> fields) {
+        System.out.println("***"+cls.getSimpleName()+"***");
+        for (Element element : cls.getEnclosedElements()) {
+            if (element.getKind().isField()) {
+                System.out.println("field: " + element.getSimpleName());
+                System.out.println("field: " + element.asType());
+                fields.add(element.getSimpleName() + " ---- " + element.asType());
+                
+                
+                // TODO prüfen auf Annotation
+            }
+        }
+        
+        TypeElement classElement = (TypeElement) cls;        
+        if (classElement.getSuperclass() != null) {
+            Element scls = elementsUtils.getTypeElement(classElement.getSuperclass().toString());
+            if (scls.getSimpleName().toString().equalsIgnoreCase("Object")) {
+                return;
+            }
+            getFieldsDummy(scls, fields);
+        } else {
+            return;
+        }
+    }
+    
+    private boolean findTaskAction(Element classElement) {
+        for (Element element : classElement.getEnclosedElements()) {
+            for (AnnotationMirror annot : elementsUtils.getAllAnnotationMirrors(element)) {
+                if (annot.toString().endsWith(TASK_ACTION_ANNOTATION)) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+    
     private void getFields(TypeElement classElement, List<String> fields) {
         for (Element element : classElement.getEnclosedElements()) {
             System.out.println("element: " + element);
@@ -189,6 +244,10 @@ public class GretlDoclet implements Doclet {
             
             if (element.getKind().isField() || element.getKind().equals(ElementKind.METHOD)) {
                 System.out.println("element is field or method");
+                
+                System.out.println(element.asType());
+                System.out.println(element.asType());
+                System.out.println(element.asType().getKind());
                 
                 try {
                     System.out.println(elementsUtils.getAllAnnotationMirrors(element));
@@ -309,16 +368,14 @@ public class GretlDoclet implements Doclet {
     }
 
     private Stream<PackageElement> getSpecifiedPackages(DocletEnvironment root) {
-        
-        System.out.println("**1"+root.toString());
-        
         return root.getSpecifiedElements()
                 .stream()
-                .filter(element -> {
-                    System.out.println("element: " + element);
-                    
-                    //ElementKind.PACKAGE == element.getKind()
-                    return true;})
+                .filter(element -> {                    
+                    if (ElementKind.PACKAGE == element.getKind()) {
+                        return true;
+                    }
+                    return false;
+                    })
                 .map(element -> (PackageElement) element);
     }
     
