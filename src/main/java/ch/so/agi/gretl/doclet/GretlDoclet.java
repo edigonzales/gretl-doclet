@@ -44,6 +44,7 @@ import java.io.File;
 import java.io.FileWriter;
 import java.io.IOException;
 import java.io.PrintWriter;
+import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
@@ -65,14 +66,7 @@ import java.util.stream.Stream;
  * @author Duke
  */
 public class GretlDoclet implements Doclet {
-    public static final String OPT_OUTFILE = "-outfile";
-    private static final String JAVADOC_URL = "https://docs.oracle.com/en/java/javase/11/docs/api/";
-
-    private Reporter reporter;
-   
-    private boolean alpha;
-    private String outputFile;
-    private int gamma;
+    private String outputDirectory;
     
     private DocTrees dcTreeUtils;
     private Elements elementsUtils;
@@ -86,128 +80,80 @@ public class GretlDoclet implements Doclet {
     }};
     
     private static final String TASK_ACTION_ANNOTATION = "TaskAction";
+    private static final String OPTIONAL_ANNOTATION = "Optional";
 
     @Override
-    public void init(Locale locale, Reporter reporter) {
-        this.reporter = reporter;
-    }
+    public void init(Locale locale, Reporter reporter) {}
  
     @Override
     public String getName() {
         return getClass().getSimpleName();
     }
  
-
     @Override
     public SourceVersion getSupportedSourceVersion() {
         return SourceVersion.latest();
     }
  
- 
     @Override
     public boolean run(DocletEnvironment env) {
-        try {
+        
+        File outputDir = new File(outputDirectory);
+        if(!outputDir.exists())
+            outputDir.mkdirs();
+        
+        // Alle Klassen suchen. Die abstrakten Klassen werden ignoriert und ihre
+        // Attribute (Parameter) müssen bei der Kindklasse eruiert werden.
+        // ACHTUNG: In der neuen Syntax sind alle Task-Klassen abstract.
+        // Vielleicht nach einer Methode Ausschau halten, mit der TaskAction-
+        // Annotation? (preprocessing)
+        // Oder auch nicht. Müssen wir dann entscheiden. Abstrakt glaub nur, falls
+        // es managed types sind. Das ist nicht zwingend für lazy. Aber hat den 
+        // Vorteil, dass man den Getter nicht schreiben muss. (?)
+        List<Element> clazzes = getSpecifiedClasses(env).collect(Collectors.toList());
+        Iterator<? extends Element> classesIterator = clazzes.iterator();
+            
+            
+        // Beschreibungen (gemäss Spez) sämtlicher Element.
+        dcTreeUtils = env.getDocTrees();
+        
+        // Annotationen (und andere Infos) sämtlicher Elemente.
+        elementsUtils = env.getElementUtils();
 
-            File outFile = new File(outputFile);
-            outFile.getParentFile().mkdirs();
-            try (FileWriter fw = new FileWriter(outFile);
-                 PrintWriter pw = new PrintWriter(fw, true)) {
+        while (classesIterator.hasNext()) {
+            Element cls = classesIterator.next();                                                
+            System.out.println("className: " + cls);
+            
+            File outFile = Paths.get(outputDir.getAbsolutePath(), cls.toString() + ".md").toFile();
+            try (FileWriter fw = new FileWriter(outFile); PrintWriter pw = new PrintWriter(fw, true)) {
+                pw.println("Parameter | Datentyp | Beschreibung | Optional");
+                pw.println("----------|----------|-------------|-------------");
                 
-                pw.println("<ol class=\"toc\" id=\"pageToc\">");
-                getSpecifiedPackages(env)
-                        .forEach(pack -> {
-                            pw.format("  <li><a href=\"#Package_%s\">%s</a></li>\n",
-                                    pack.getQualifiedName()
-                                            .toString().replace('.', '_'),
-                                    pack.getQualifiedName().toString());
-                        });
+                // Nur Klassen mit einer TaskAction-annotierten Methoden werden behandelt.
+                if (!findTaskAction(cls)) 
+                    continue;
+                
+                TypeElement classElement = (TypeElement) cls;
+                
+                List<Property> properties = new ArrayList<>();
+                getProperties(classElement, properties); 
+                
+                properties.sort(Comparator.comparing(Property::getName));
 
-                pw.println("</ol>\n\n");
-
-                getSpecifiedPackages(env).forEach(pack -> {
-                    pw.format("<h2 id=\"Package_%s\">Package %s</h2>\n",
-                            pack.getQualifiedName().toString().replace('.', '_'),
-                            pack.getQualifiedName().toString());
-                    pw.println("<dl>");
-
-                    String packURL = JAVADOC_URL + pack.getQualifiedName().toString()
-                            .replace(".", "/") + "/";
-
-                    // Alle Klassen suchen. Die abstrakten Klassen werden ignoriert und ihre
-                    // Attribute (Parameter) müssen bei der Kindklasse eruiert werden.
-                    // ACHTUNG: In der neuen Syntax sind alle Task-Klassen abstract.
-                    // Vielleicht nach einer Methode Ausschau halten, mit der TaskAction-
-                    // Annotation? (preprocessing)
-                    // Oder auch nicht. Müssen wir dann entscheiden. Abstrakt glaub nur, falls
-                    // es managed types sind. Das ist nicht zwingend für lazy. Aber hat den 
-                    // Vorteil, dass man den Getter nicht schreiben muss. (?)
-                    Iterator<? extends Element> classesIterator = pack.getEnclosedElements()
-                            .stream()
-                            .filter(element -> env.isSelected(element) && env.isIncluded(element))
-                            .filter(element -> element.getModifiers().contains(Modifier.PUBLIC))
-                            .filter(element -> !element.getModifiers().contains(Modifier.ABSTRACT))
-                            .sorted(Comparator.comparing((Element o) -> o.getSimpleName()
-                                    .toString()))
-                            .iterator();
-                    
-                    
-                    //DocTrees docTrees = env.getDocTrees();
-                    //System.out.println("classes:" + ElementFilter.typesIn(env.getIncludedElements()));
-
-                    // Beschreibungen (gemäss Spez) sämtlicher Element.
-                    dcTreeUtils = env.getDocTrees();
-                    
-                    // Annotationen (und andere Infos) sämtlicher Elemente.
-                    elementsUtils = env.getElementUtils();
-
-                    while (classesIterator.hasNext()) {
-                        Element cls = classesIterator.next();                                                
-                        //TypeElement classElement = (TypeElement) cls;
-                        System.out.println("className: " + cls.getSimpleName());
-                        System.out.println("className: " + cls);
-
-                        // Nur Klassen mit einer TaskAction-annotierten Methoden werden behandelt.
-                        if (!findTaskAction(cls)) 
-                            continue;
-
-                        
-                        TypeElement classElement = (TypeElement) cls;
-                        
-                        List<String> fields = new ArrayList<>();
-                        getFieldsDummy(classElement, fields); 
-                        
-                        System.out.println("fields: " + fields);
-                        
-//                        System.out.println(classElement.getModifiers().size());
-//                        classElement.getModifiers().stream().filter(m -> {
-//                            System.out.println(m.name());
-//                            System.out.println("*****");
-//                            return true;
-//                        });
-                        
-                        // Each class links to Oracle's main JavaDoc
-//                        emitClassDocs(env, pw, packURL, cls);
-                        if (classesIterator.hasNext()) {
-                            pw.print("\n");
-                        }
-                    }
-
-                    pw.println("</dl>\n");
-                });
+                for (Property property : properties) {
+                    pw.println(property.getName() + " | `" + property.getType() + "` | " + property.getDescription() + " | " + (property.isMandatory() ? "nein" : "ja"));         
+                }
+            } catch (IOException e) {
+                e.printStackTrace();
             }
-        } catch (IOException e) {
-            throw new RuntimeException(e);
         }
 
         return true;
     }
     
-    private void getFieldsDummy(Element cls, List<String> fields) {
-        System.out.println("***"+cls.getSimpleName()+"***");
+    private void getProperties(Element cls, List<Property> properties) {
         for (Element element : cls.getEnclosedElements()) {
-            if (element.getKind().isField()) {
-                
-                //System.out.println(elementsUtils.getAllAnnotationMirrors(element));
+            if (element.getKind().isField()) {                
                 boolean isGradleProperty = elementsUtils.getAllAnnotationMirrors(element).stream().map(annot -> {
                     String annotSimpleName = annot.toString().substring(annot.toString().lastIndexOf(".")+1);
                     return annotSimpleName;
@@ -216,28 +162,30 @@ public class GretlDoclet implements Doclet {
                 
                 if (!isGradleProperty) 
                     continue;
+                
+                boolean isOptional = elementsUtils.getAllAnnotationMirrors(element).stream().map(annot -> {
+                    String annotSimpleName = annot.toString().substring(annot.toString().lastIndexOf(".")+1);
+                    return annotSimpleName;
+                })
+                .filter(annot -> {
+                    if(annot.contains(OPTIONAL_ANNOTATION)) {
+                        return true;
+                    }
+                    return false;
+                }).count() > 0; 
 
-                System.out.println("---------------------");
-
-                String name = element.getSimpleName().toString();
-                System.out.println("name: " + name);
+                Property property = new Property();
+                property.setName(element.getSimpleName().toString());
                 if (dcTreeUtils.getDocCommentTree(element) != null) {
-                    String description = dcTreeUtils.getDocCommentTree(element).toString();                    
+                    property.setDescription(dcTreeUtils.getDocCommentTree(element).toString());
                 }
                 String qualifiedFieldType = element.asType().toString();
-                
+                property.setQualifiedType(qualifiedFieldType);
                 String unqualifiedFieldType = getUnqualifiedFieldType(qualifiedFieldType);
-                System.out.println("unqualifiedFieldType: " + unqualifiedFieldType);
+                property.setType(unqualifiedFieldType);
+                property.setMandatory(!isOptional);
                 
-//                if (element.asType().getKind().equals(TypeKind.DECLARED)) {
-//                    
-//                    DeclaredType dType = (DeclaredType) element.asType();
-//                    System.out.println(dType);
-//                    System.out.println(dType.asElement());
-//                }
-                
-                fields.add(element.getSimpleName() + " ---- " + element.asType());
-                
+                properties.add(property);
             }
         }
         
@@ -247,13 +195,12 @@ public class GretlDoclet implements Doclet {
             if (scls.getSimpleName().toString().equalsIgnoreCase("Object")) {
                 return;
             }
-            getFieldsDummy(scls, fields);
+            getProperties(scls, properties);
         } else {
             return;
         }
     }
     
-   
     private String getUnqualifiedFieldType(String fieldType) {        
         if (!fieldType.contains(".")) {
             return fieldType;
@@ -266,10 +213,7 @@ public class GretlDoclet implements Doclet {
         StringBuilder unqualifiedFieldType = new StringBuilder();
         
         String[] partsBracket = fieldType.split("[<]");
-        // Print the result
-        System.out.println("Split parts:");
         for (int i=0; i<partsBracket.length; i++) {
-            System.out.println("part:" + partsBracket[i]);
             if (i>0) {
                 unqualifiedFieldType.append("<");
             }
@@ -279,101 +223,8 @@ public class GretlDoclet implements Doclet {
                 if (ii<partsComma.length-1) {
                     unqualifiedFieldType.append(",");
                 }
-            }
-            
-//            unqualifiedFieldType.append(getUnqualifiedFieldType(partsBracket[i]));
-//            if (i>0) {
-//                unqualifiedFieldType.append(">");            
-//            }
+            }            
         }
-
-        
-        
-//        if (!fieldType.contains(".")) {
-//            return fieldType;
-//        }
-//        
-//        if (!fieldType.contains("<")) {
-//            return fieldType.substring(fieldType.lastIndexOf(".")+1);
-//        }
-//        
-//        if (!fieldType.startsWith("<") && fieldType.contains("<")) {
-//            unqualifiedFieldType.append(getUnqualifiedFieldType(fieldType.substring(0, fieldType.indexOf("<"))));
-//        }
-//      
-//        System.out.println("unqualifiedFieldType (inside 1): " + unqualifiedFieldType);
-        
-        
-        
-        
-//        Stack<Integer> stack = new Stack<>();
-//        Stack<Integer> nested = new Stack<>();
-//        boolean openingBracketFound = false;
-//        for (int i = 0; i < fieldType.length(); i++) {
-//            char currentChar = fieldType.charAt(i);
-//            if (currentChar == '<' && !openingBracketFound) {
-//                stack.push(i);
-//                openingBracketFound = true;
-//            } else if (currentChar == '>' && !stack.isEmpty()) {
-//                int startIndex = stack.pop();
-//                int endIndex = i;
-//                String textBetweenBrackets = fieldType.substring(startIndex + 1, endIndex);
-//                
-//                unqualifiedFieldType.append("<");
-//
-//                String[] splittedFieldTypes = textBetweenBrackets.split(",");
-//                for (String ft : splittedFieldTypes) {
-//                    unqualifiedFieldType.append(getUnqualifiedFieldType(ft));                    
-//                }
-//                
-//                unqualifiedFieldType.append(">");
-//                
-//                if (openingBracketFound) {
-//                    unqualifiedFieldType.append(">");                    
-//                }
-//
-//                //unqualifiedFieldType.append("<").append(getUnqualifiedFieldType(textBetweenBrackets)).append(">");
-//                
-//                System.out.println("1111Text between angle brackets: " + textBetweenBrackets);
-//            } else if (currentChar == '<' && openingBracketFound) {
-//                System.out.println("nested");
-//                nested.push(i);
-//                int startIndex = stack.pop();
-//                int endIndex = i;
-//                String textBetweenBrackets = fieldType.substring(startIndex + 1, endIndex);
-//                System.out.println("textBetweenBrackets: " + textBetweenBrackets);
-//                
-//                unqualifiedFieldType.append("<").append(getUnqualifiedFieldType(textBetweenBrackets));
-//                //System.out.println("2222Text between angle brackets: " + textBetweenBrackets);                
-//                stack.push(i);
-//            }
-//        }
-
-//        boolean insideBrackets = false;
-//        StringBuilder contentInsideBrackets = new StringBuilder();
-//
-//        for (char c : fieldType.toCharArray()) {
-//            if (c == '<' && !insideBrackets) {
-//                insideBrackets = true;
-//                System.out.println("erstes");
-//            } else if (c == '<' && insideBrackets) {
-//                System.out.println("nested");
-//                System.out.println("Content inside angle brackets: " + contentInsideBrackets.toString());
-//                contentInsideBrackets.setLength(0); // Clear the StringBuilder for the next match
-//            } else if (c == '>' && insideBrackets) {
-//                //insideBrackets = false;
-//                System.out.println("Content inside angle brackets: " + contentInsideBrackets.toString());
-//                contentInsideBrackets.setLength(0); // Clear the StringBuilder for the next match
-//            } else if (insideBrackets) {
-//                contentInsideBrackets.append(c);
-//            }
-//        }
-//
-//        /* 
-//         * Wenn erstes "<", dann generic found. Zeichen sammeln, bis ">" oder nächstes "<". Zeichen ausgeben. 
-//         */
-//        
-        
         return unqualifiedFieldType.toString();
     }
     
@@ -387,140 +238,29 @@ public class GretlDoclet implements Doclet {
         }
         return false;
     }
-    
-    private void getFields(TypeElement classElement, List<String> fields) {
-        for (Element element : classElement.getEnclosedElements()) {
-            System.out.println("element: " + element);
-            System.out.println("kind: " + element.getKind());
             
-            DocCommentTree dcTree = dcTreeUtils.getDocCommentTree(element);
-            //System.out.println("dcTree: " + dcTree);
-            
-            if (element.getKind().isField() || element.getKind().equals(ElementKind.METHOD)) {
-                System.out.println("element is field or method");
-                
-                System.out.println(element.asType());
-                System.out.println(element.asType());
-                System.out.println(element.asType().getKind());
-                
-                try {
-                    System.out.println(elementsUtils.getAllAnnotationMirrors(element));
-                    
-                } catch (Exception e) {}
-                
-            }
-            
-        }
-    }
-    
-    private void emitClassDocs(DocletEnvironment env, PrintWriter pw, String packURL, Element cls) {
-        pw.format("  <dt><a href=\"%s%s.html\">%s</a></dt>\n", packURL,
-                qualifiedSimpleName(cls), qualifiedSimpleName(cls));
-
-        // Print out all fields
-        String fields = cls.getEnclosedElements()
-                .stream()
-                .filter(element -> element.getKind().isField())
-                .filter(field -> field.getModifiers().contains(Modifier.PUBLIC))
-                .map(field -> field.getSimpleName().toString())
-                .collect(Collectors.joining(", "));
-
-        if (!fields.isEmpty()) {
-            pw.format("  <dd style='margin-bottom: 0.5em;'>%s</dd>\n", fields);
-        }
-
-        List<String> constructors = cls.getEnclosedElements()
-                .stream()
-                .filter(element -> ElementKind.CONSTRUCTOR == element.getKind())
-                .filter(member -> member.getModifiers().contains(Modifier.PUBLIC))
-                .map(member -> (ExecutableElement) member)
-                .map(executableElement -> flatSignature(env, cls, executableElement))
-                .collect(Collectors.toList());
-
-        List<String> methods = cls.getEnclosedElements()
-                .stream()
-                .filter(element -> ElementKind.METHOD == element.getKind())
-                .filter(member -> member.getModifiers().contains(Modifier.PUBLIC))
-                .map(member -> (ExecutableElement) member)
-                .map(executableElement -> flatSignature(env, cls, executableElement))
-                .collect(Collectors.toList());
-
-        List<String> members = new ArrayList<>(constructors);
-        members.addAll(methods);
-
-        // Print out all constructors and methods
-        if (!members.isEmpty()) {
-            pw.format("  <dd>%s</dd>\n", createMemberList(members));
-        }
-
-        Iterator<? extends Element> classesIterator = cls.getEnclosedElements()
-                .stream()
-                .filter(element -> element.getKind().isClass()
-                        || element.getKind().isInterface()
-                        || ElementKind.ENUM == element.getKind())
-                .filter(element -> element.getModifiers().contains(Modifier.PUBLIC))
-                .sorted(Comparator.comparing((Element o) -> o.getSimpleName().toString()))
-                .iterator();
-        if (classesIterator.hasNext()) {
-            pw.print("\n");
-        }
-        while (classesIterator.hasNext()) {
-            Element innerCls = classesIterator.next();
-            // Each class links to Sun's main JavaDoc
-            emitClassDocs(env, pw, packURL, innerCls);
-            if (classesIterator.hasNext()) {
-                pw.print("\n");
-            }
-        }
-    }
-    
-    private String createMemberList(Collection<String> members) {
-        StringBuilder sb = new StringBuilder();
-        Iterator<String> iter = members.iterator();
-        while (iter.hasNext()) {
-            String member = iter.next();
-            sb.append(member);
-            if (iter.hasNext()) {
-                sb.append(", ");
-            }
-        }
-        return sb.toString();
-    }
-
-    private String qualifiedSimpleName(Element element) {
-        String elementName = element.getSimpleName().toString();
-        if (ElementKind.PACKAGE != element.getEnclosingElement().getKind()) {
-            return qualifiedSimpleName(element.getEnclosingElement()) + "." + elementName;
-        }
-        return elementName;
-    }
-
-    private String flatSignature(DocletEnvironment env, Element parent, ExecutableElement member) {
-        return (ElementKind.CONSTRUCTOR == member.getKind()
-                ? parent.getSimpleName().toString()
-                : member.getSimpleName().toString()) +
-                "(" + member.getParameters()
-                .stream()
-                .map(Element::asType)
-                .map(t -> simpleParamName(env, t))
-                .collect(Collectors.joining(", ")) + ")";
-    }
-
-    private String simpleParamName(DocletEnvironment env, TypeMirror type) {
-        if (type.getKind().isPrimitive() || TypeKind.TYPEVAR == type.getKind()) {
-            return String.valueOf(type);
-        } else if (TypeKind.ARRAY == type.getKind()) {
-            return simpleParamName(env, ((ArrayType) type).getComponentType()) + "[]";
-        } else {
-            return qualifiedSimpleName(env.getTypeUtils().asElement(type));
-        }
-    }
-    
     @Override
     public Set<? extends Option> getSupportedOptions() {        
         return options;
     }
 
+    private Stream<TypeElement> getSpecifiedClasses(DocletEnvironment root) {
+        return root.getSpecifiedElements()
+                .stream()
+                .filter(element -> {                    
+                    if (ElementKind.CLASS == element.getKind()) {
+                        return true;
+                    }
+                    return false;
+                    })
+//                .filter(element -> env.isSelected(element) && env.isIncluded(element))
+                .filter(element -> element.getModifiers().contains(Modifier.PUBLIC))
+                .filter(element -> !element.getModifiers().contains(Modifier.ABSTRACT))
+                .sorted(Comparator.comparing((Element o) -> o.getSimpleName()
+                        .toString()))                
+                .map(element -> (TypeElement) element);
+    }
+        
     private Stream<PackageElement> getSpecifiedPackages(DocletEnvironment root) {
         return root.getSpecifiedElements()
                 .stream()
@@ -528,54 +268,21 @@ public class GretlDoclet implements Doclet {
                     if (ElementKind.PACKAGE == element.getKind()) {
                         return true;
                     }
+                    //System.out.println("element: " + element);
                     return false;
                     })
                 .map(element -> (PackageElement) element);
     }
     
-    private final Set<Option> options = Set.of(
-            // An option that takes no arguments.
-            new Option("--alpha", false, "a flag", null) {
+    private final Set<Option> options = Set.of( 
+            new Option("-d", true, "Output directory path", "<string>") {
                 @Override
                 public boolean process(String option,
                                        List<String> arguments) {
-                    alpha = true;
+                    outputDirectory = arguments.get(0);                    
                     return true;
                 }
-            },
- 
-            // An option that takes a single string-valued argument.
-            new Option("--output", true, "Output file path", "<string>") {
-                @Override
-                public boolean process(String option,
-                                       List<String> arguments) {
-                    outputFile = arguments.get(0);
-                    
-                    System.out.println("*************" + outputFile);
-                    return true;
-                }
-            },
- 
-            // An option that takes a single integer-valued srgument.
-            new Option("--gamma", true, "another option", "<int>") {
-                @Override
-                public boolean process(String option,
-                                       List<String> arguments) {
-                    String arg = arguments.get(0);
-                    try {
-                        gamma = Integer.parseInt(arg);
-                        return true;
-                    } catch (NumberFormatException e) {
-                        // Note: it would be better to use
-                        // {@link Reporter} to print an error message,
-                        // so that the javadoc tool "knows" that an
-                        // error was reported in conjunction\ with
-                        // the "return false;" that follows.
-                        System.err.println("not an int: " + arg);
-                        return false;
-                    }
-                }
-            }
+            } 
     );
     
     abstract class Option implements Doclet.Option {

@@ -1,13 +1,11 @@
 package ch.so.agi.gretl.doclet;
 
-import java.net.URI;
-
 public class Property {
     public String name;
     public String description;
     public String type;
     public String qualifiedType;
-    public URI javadocUrl;
+    public boolean mandatory;
     
     public String getName() {
         return name;
@@ -33,10 +31,10 @@ public class Property {
     public void setQualifiedType(String qualifiedType) {
         this.qualifiedType = qualifiedType;
     }
-    public URI getJavadocUrl() {
-        return javadocUrl;
+    public boolean isMandatory() {
+        return mandatory;
     }
-    public void setJavadocUrl(URI javadocUrl) {
-        this.javadocUrl = javadocUrl;
+    public void setMandatory(boolean mandatory) {
+        this.mandatory = mandatory;
     }
 }

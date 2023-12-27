@@ -8,6 +8,7 @@ public class DummyTask extends DummySuperTask {
      * Im A Comment
      */
     @Input
+    @Optional
     public String foo;
     
     /**
