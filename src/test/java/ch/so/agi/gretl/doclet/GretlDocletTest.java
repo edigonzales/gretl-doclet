@@ -2,7 +2,6 @@ package ch.so.agi.gretl.doclet;
 
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-import java.io.File;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -27,8 +26,6 @@ public class GretlDocletTest {
           "-d", tempDir.toString(),      
           "-classpath",
           classpath,
-//          "./src/test/java/ch/so/agi/gretl/doclet/test/ManagedPropertyTask.java",
-//          "./src/test/java/ch/so/agi/gretl/doclet/test/NonManagedPropertyTask.java",
           "./src/test/java/ch/so/agi/gretl/doclet/test/DummyTask.java"
         };
         DocumentationTool.DocumentationTask task = systemDocumentationTool.getTask(null, null, null, GretlDoclet.class,
