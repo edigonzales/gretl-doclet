@@ -1,8 +1,13 @@
 plugins {
     id 'java-library'
+    id 'org.jreleaser' version '1.14.0'
 }
 
 apply from: "$rootDir/gradle/versioning.gradle"
+
+group = 'ch.so.agi.gretl'
+def myArtifactId = "gretl-doclet"
+
 
 repositories {
     mavenCentral()
@@ -23,4 +28,39 @@ java {
 
 tasks.named('test') {
     useJUnitPlatform()
+}
+
+jreleaser {
+    gitRootSearch = true
+    
+    project {
+        name = myArtifactId
+        description = 'Java Doclet für GRETL.'
+        website = 'https://agi.so.ch'
+        authors = ['edigonzales']
+        license = 'MIT'
+        docsUrl = 'https://github.com/edigonzales/gretl-doclet'
+        copyright = '2024 Stefan Ziegler'
+    }
+    release {
+        github {
+            repoOwner = 'edigonzales'
+            overwrite = true
+            apiEndpoint = 'https://api.github.com'
+        }
+    }
+    distributions {
+        appJvm {
+            distributionType = 'SINGLE_JAR'
+            stereotype = 'CLI'
+            artifact {
+                path = "build/libs/gretl-doclet-${version}.jar"
+            }
+            java {
+                groupId = 'ch.so.agi.gretl'
+                artifactId = myArtifactId
+                version = '11'
+            }
+        }
+    }
 }
