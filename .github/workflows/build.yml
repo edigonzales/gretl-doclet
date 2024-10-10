@@ -26,7 +26,7 @@ jobs:
           
       - name: Build with Gradle
         id: build
-        run: ./gradlew clean build sourcesJar javadocJar 
+        run: ./gradlew clean build  
 
       - uses: actions/upload-artifact@v4
         if: always() && (steps.build.outcome == 'failure')
