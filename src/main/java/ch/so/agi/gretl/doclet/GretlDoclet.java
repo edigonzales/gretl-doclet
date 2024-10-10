@@ -72,8 +72,10 @@ public class GretlDoclet implements Doclet {
     private Elements elementsUtils;
     
     private static final List<String> GRADLE_ANNOTATIONS = new ArrayList<>() {{
+        add("Internal");
         add("Input");
         add("InputFile");
+        add("InputDirectory");
         add("Optional");
         add("OutputFile");
         add("OutputDirectory");
@@ -102,17 +104,17 @@ public class GretlDoclet implements Doclet {
         if(!outputDir.exists())
             outputDir.mkdirs();
         
-        // Alle Klassen suchen. Die abstrakten Klassen werden ignoriert und ihre
-        // Attribute (Parameter) müssen bei der Kindklasse eruiert werden.
-        // ACHTUNG: In der neuen Syntax sind alle Task-Klassen abstract.
-        // Vielleicht nach einer Methode Ausschau halten, mit der TaskAction-
-        // Annotation? (preprocessing)
-        // Oder auch nicht. Müssen wir dann entscheiden. Abstrakt glaub nur, falls
-        // es managed types sind. Das ist nicht zwingend für lazy. Aber hat den 
-        // Vorteil, dass man den Getter nicht schreiben muss. (?)
+        // Es werden alle Klassen berücksichtigt, die im Paket 'ch.so.agi.gretl.*' liegen. 
+        // Abstrakte Klassen werden auch berücksichtigt. Grund dafür sind Implementierungen
+        // von Tasks, die Managed Properties verwenden. Das führt zu false positives. Die 
+        // können/müssen beim späteren Prozessieren ignoriert werden.
+        // In einer vererbten Klasse werden alle Properties der Mutterklasse berücksichtigt.
+        
+        // Eine andere Variante wäre das Einführungen von Annotation, z.B. 'GretlDocClass', 
+        // GretlDocDescription(...) etc.
+        
         List<Element> clazzes = getSpecifiedClasses(env).collect(Collectors.toList());
         Iterator<? extends Element> classesIterator = clazzes.iterator();
-            
             
         // Beschreibungen (gemäss Spez) sämtlicher Element.
         dcTreeUtils = env.getDocTrees();
@@ -122,17 +124,16 @@ public class GretlDoclet implements Doclet {
 
         while (classesIterator.hasNext()) {
             Element cls = classesIterator.next();                                                
-            System.out.println("className: " + cls);
+
+            // Nur Klassen mit einer TaskAction-annotierten Methoden werden behandelt.
+            if (!findTaskAction(cls)) 
+                continue;
             
             File outFile = Paths.get(outputDir.getAbsolutePath(), cls.toString() + ".md").toFile();
             try (FileWriter fw = new FileWriter(outFile); PrintWriter pw = new PrintWriter(fw, true)) {
                 pw.println("Parameter | Datentyp | Beschreibung | Optional");
                 pw.println("----------|----------|-------------|-------------");
-                
-                // Nur Klassen mit einer TaskAction-annotierten Methoden werden behandelt.
-                if (!findTaskAction(cls)) 
-                    continue;
-                
+
                 TypeElement classElement = (TypeElement) cls;
                 
                 List<Property> properties = new ArrayList<>();
@@ -153,40 +154,52 @@ public class GretlDoclet implements Doclet {
     
     private void getProperties(Element cls, List<Property> properties) {
         for (Element element : cls.getEnclosedElements()) {
-            if (element.getKind().isField()) {                
-                boolean isGradleProperty = elementsUtils.getAllAnnotationMirrors(element).stream().map(annot -> {
-                    String annotSimpleName = annot.toString().substring(annot.toString().lastIndexOf(".")+1);
-                    return annotSimpleName;
-                })
-                .anyMatch(GRADLE_ANNOTATIONS::contains);
-                
-                if (!isGradleProperty) 
-                    continue;
-                
-                boolean isOptional = elementsUtils.getAllAnnotationMirrors(element).stream().map(annot -> {
-                    String annotSimpleName = annot.toString().substring(annot.toString().lastIndexOf(".")+1);
-                    return annotSimpleName;
-                })
-                .filter(annot -> {
-                    if(annot.contains(OPTIONAL_ANNOTATION)) {
-                        return true;
-                    }
-                    return false;
-                }).count() > 0; 
-
-                Property property = new Property();
-                property.setName(element.getSimpleName().toString());
-                if (dcTreeUtils.getDocCommentTree(element) != null) {
-                    property.setDescription(dcTreeUtils.getDocCommentTree(element).toString());
-                }
-                String qualifiedFieldType = element.asType().toString();
-                property.setQualifiedType(qualifiedFieldType);
-                String unqualifiedFieldType = getUnqualifiedFieldType(qualifiedFieldType);
-                property.setType(unqualifiedFieldType);
-                property.setMandatory(!isOptional);
-                
-                properties.add(property);
+            
+            if (!element.getEnclosingElement().toString().startsWith("ch.so.agi.gretl")) {
+                continue;
             }
+                        
+            boolean isGradlePropertyOrMethod = elementsUtils.getAllAnnotationMirrors(element).stream().map(annot -> {
+                String annotSimpleName = annot.toString().substring(annot.toString().lastIndexOf(".") + 1);
+                return annotSimpleName;
+            }).anyMatch(GRADLE_ANNOTATIONS::contains);
+            
+            if (!isGradlePropertyOrMethod) {
+                continue;
+            }
+            
+            String propertyName = "";
+            if (element.getKind() == ElementKind.FIELD) {
+                propertyName = element.getSimpleName().toString();
+            } else if (element.getKind() == ElementKind.METHOD) {
+                propertyName = extractPropertyName(element.getSimpleName().toString());
+            } else {
+                continue;
+            }
+            
+            boolean isOptional = elementsUtils.getAllAnnotationMirrors(element).stream().map(annot -> {
+                String annotSimpleName = annot.toString().substring(annot.toString().lastIndexOf(".") + 1);
+                return annotSimpleName;
+            }).filter(annot -> {
+                if (annot.contains(OPTIONAL_ANNOTATION)) {
+                    return true;
+                }
+                return false;
+            }).count() > 0;
+
+            Property property = new Property();
+            property.setName(propertyName);
+            if (dcTreeUtils.getDocCommentTree(element) != null) {
+                property.setDescription(dcTreeUtils.getDocCommentTree(element).toString());
+            }
+            
+            String qualifiedFieldType = element.asType().toString();
+            property.setQualifiedType(qualifiedFieldType);
+            String unqualifiedFieldType = getUnqualifiedFieldType(qualifiedFieldType);
+            property.setType(unqualifiedFieldType);
+            property.setMandatory(!isOptional);
+
+            properties.add(property);            
         }
         
         TypeElement classElement = (TypeElement) cls;        
@@ -201,7 +214,9 @@ public class GretlDoclet implements Doclet {
         }
     }
     
-    private String getUnqualifiedFieldType(String fieldType) {        
+    private String getUnqualifiedFieldType(String fieldType) {       
+        fieldType = fieldType.replace("()", "");
+        
         if (!fieldType.contains(".")) {
             return fieldType;
         }
@@ -255,7 +270,8 @@ public class GretlDoclet implements Doclet {
                     })
 //                .filter(element -> env.isSelected(element) && env.isIncluded(element))
                 .filter(element -> element.getModifiers().contains(Modifier.PUBLIC))
-                .filter(element -> !element.getModifiers().contains(Modifier.ABSTRACT))
+//                .filter(element -> { System.out.println("**"+element.getSimpleName());  return true;})
+//                .filter(element -> !element.getModifiers().contains(Modifier.ABSTRACT))
                 .sorted(Comparator.comparing((Element o) -> o.getSimpleName()
                         .toString()))                
                 .map(element -> (TypeElement) element);
@@ -277,13 +293,20 @@ public class GretlDoclet implements Doclet {
     private final Set<Option> options = Set.of( 
             new Option("-d", true, "Output directory path", "<string>") {
                 @Override
-                public boolean process(String option,
-                                       List<String> arguments) {
+                public boolean process(String option, List<String> arguments) {
                     outputDirectory = arguments.get(0);                    
                     return true;
                 }
             } 
     );
+    
+    private static String extractPropertyName(String methodName) {
+        if (methodName.startsWith("get")) {
+            String coreName = methodName.substring(3); 
+            return coreName.substring(0, 1).toLowerCase() + coreName.substring(1);
+        }
+        return methodName;
+    }
     
     abstract class Option implements Doclet.Option {
         private final String name;

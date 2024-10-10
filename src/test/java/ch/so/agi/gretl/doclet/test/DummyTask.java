@@ -3,6 +3,10 @@ package ch.so.agi.gretl.doclet.test;
 import java.util.List;
 import java.util.Map;
 
+import org.gradle.api.tasks.Input;
+import org.gradle.api.tasks.Optional;
+import org.gradle.api.tasks.TaskAction;
+
 public class DummyTask extends DummySuperTask {
     /**
      * Im A Comment
@@ -36,7 +40,7 @@ public class DummyTask extends DummySuperTask {
      * Dazugehörige Methode
      */
     @Input
-    @ch.so.agi.gretl.doclet.test.Optional
+    @Optional
     public double getFubar() {
         return fubar;
     }
