@@ -129,7 +129,7 @@ public class GretlDoclet implements Doclet {
             if (!findTaskAction(cls)) 
                 continue;
             
-            File outFile = Paths.get(outputDir.getAbsolutePath(), cls.toString() + ".md").toFile();
+            File outFile = Paths.get(outputDir.getAbsolutePath(), "_" + cls.toString() + ".md").toFile();
             try (FileWriter fw = new FileWriter(outFile); PrintWriter pw = new PrintWriter(fw, true)) {
                 pw.println("Parameter | Datentyp | Beschreibung | Optional");
                 pw.println("----------|----------|-------------|-------------");
@@ -144,6 +144,8 @@ public class GretlDoclet implements Doclet {
                 for (Property property : properties) {
                     pw.println(property.getName() + " | `" + property.getType() + "` | " + property.getDescription() + " | " + (property.isMandatory() ? "nein" : "ja"));         
                 }
+                
+                pw.println(": {tbl-colwidths=\"[20,20,50,10]\"}");
             } catch (IOException e) {
                 e.printStackTrace();
             }

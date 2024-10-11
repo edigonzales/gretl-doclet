@@ -34,7 +34,7 @@ public class GretlDocletTest {
         task.call();
 
         // Validation result
-        Path path = tempDir.resolve("ch.so.agi.gretl.doclet.test.DummyTask.md");
+        Path path = tempDir.resolve("_ch.so.agi.gretl.doclet.test.DummyTask.md");
         String content = Files.readString(path);
         
         assertTrue(content.contains("afield | `double` | null | ja"));
@@ -59,7 +59,7 @@ public class GretlDocletTest {
         task.call();
 
         // Validation result
-        Path path = tempDir.resolve("ch.so.agi.gretl.doclet.test.NonManagedPropertyTask.md");
+        Path path = tempDir.resolve("_ch.so.agi.gretl.doclet.test.NonManagedPropertyTask.md");
         String content = Files.readString(path);
         
         assertTrue(content.contains("outDirectory | `File` | null | nein"));
@@ -82,7 +82,7 @@ public class GretlDocletTest {
         task.call();
 
         // Validation result
-        Path path = tempDir.resolve("ch.so.agi.gretl.doclet.test.ManagedPropertyTask.md");
+        Path path = tempDir.resolve("_ch.so.agi.gretl.doclet.test.ManagedPropertyTask.md");
         String content = Files.readString(path);
         
         assertTrue(content.contains("database | `ListProperty<String>` | null | nein"));
