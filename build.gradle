@@ -1,11 +1,14 @@
 plugins {
     id 'java-library'
     id 'org.jreleaser' version '1.14.0'
+    id 'maven-publish'
+    id 'signing'
+    id "io.github.gradle-nexus.publish-plugin" version "1.1.0"
 }
 
 apply from: "$rootDir/gradle/versioning.gradle"
 
-group = 'ch.so.agi.gretl'
+group = 'io.github.sogis'
 def myArtifactId = "gretl-doclet"
 
 
@@ -28,6 +31,67 @@ java {
 
 tasks.named('test') {
     useJUnitPlatform()
+}
+
+task sourcesJar(type: Jar, dependsOn: classes) {
+    archiveClassifier = 'sources'
+    from sourceSets.main.allSource
+}
+
+javadoc.failOnError = false
+task javadocJar(type: Jar, dependsOn: javadoc) {
+    archiveClassifier = 'javadoc'
+    from javadoc.destinationDir
+}
+
+publishing {
+    publications {
+        mavenJava(MavenPublication) {
+            from components.java
+            artifact sourcesJar
+            artifact javadocJar
+
+            pom {
+                name = "gretl-doclet"
+                url = "https://github.com/edigonzales/gretl-doclet"
+                description = "gretl-doclet"
+                scm {
+                    connection = "scm:git:https@github.com/edigonzales/gretl-doclet"
+                    developerConnection = "scm:git:https@github.com/edigonzales/gretl-doclet"
+                    url = "https://github.com/edigonzales/gretl-doclet"
+                }
+                licenses {
+                    license {
+                        name = "MIT"
+                        url = "https://github.com/edigonzales/gretl-doclet/blob/master/LICENSE"
+                    }
+                }
+                developers {
+                    developer {
+                        id = "edigonzales"
+                        name = "Stefan Ziegler"
+                    }
+                }
+            }
+        }
+    }
+}
+
+if (!version.toString().endsWith("SNAPSHOT")) {
+    signing {
+        sign publishing.publications.mavenJava
+    }
+}
+
+nexusPublishing {
+    repositories {
+        sonatype { 
+            nexusUrl.set(uri("https://s01.oss.sonatype.org/service/local/"))
+            snapshotRepositoryUrl.set(uri("https://s01.oss.sonatype.org/content/repositories/snapshots/"))
+            username = findProperty("ossrhUsername") ?: System.getenv("OSSRH_USERNAME")
+            password = findProperty("ossrhPassword") ?: System.getenv("OSSRH_PASSWORD")
+        }
+    }
 }
 
 jreleaser {
