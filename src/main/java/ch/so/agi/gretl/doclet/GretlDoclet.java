@@ -75,6 +75,7 @@ public class GretlDoclet implements Doclet {
         add("Internal");
         add("Input");
         add("InputFile");
+        add("InputFiles");
         add("InputDirectory");
         add("Optional");
         add("OutputFile");
